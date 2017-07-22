@@ -5,20 +5,51 @@ import(
   "github.com/labstack/echo"
   "os"
   "io"
+  "github.com/jinzhu/gorm"
+  _ "github.com/jinzhu/gorm/dialects/mysql"
+  "strconv"
+  "html/template"
+  "log"
+  "fmt"
 )
+
+type TemplateRenderer struct{
+  templates *template.Template
+}
 
 type User struct{
   Name string `json:"name" xml:"name" form:"name" query:"name"`
   Email string `json:"email" xml:"email" form:"email" query:"email"`
 }
 
+type Customer struct{
+  Id  int `json:id`
+  Name  string  `json:name`
+  Sex int `json:sex`
+  Tel string  `json:tel`
+}
+
+
+func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error{
+  if viewContext, isMap := data.(map[string]interface{}); isMap{
+    viewContext["reverse"] = c.Echo().Reverse
+  }
+  return t.templates.ExecuteTemplate(w, name, data)
+}
+
+
 func main(){
   e := echo.New()
+  renderer := &TemplateRenderer{
+    templates: template.Must(template.ParseGlob("html/*.html")),
+  }
+  e.Renderer = renderer
 
   // Routing
   e.GET("/", home)
-  e.GET("/users/:id", getUser)
-  e.GET("/show", show)
+  e.GET("/users", users)
+  e.GET("/users/:id", showUser)
+  e.GET("users/search", searchUser)
   e.POST("/save", save)
   e.POST("/users/save", saveUser)
   e.POST("/users", saveUsers)
@@ -29,15 +60,44 @@ func home(c echo.Context) error{
   return c.String(http.StatusOK, "Hello, World!")
 
 }
-func getUser(c echo.Context) error{
-  id := c.Param("id")
-  return c.String(http.StatusOK, id)
+
+func users(c echo.Context) error{
+  db := connectDB()
+
+  customerEx := Customer{}
+  db.Find(&customerEx)
+  log.Print(customerEx)
+
+  data := struct{
+    id int
+    name string
+    sex int
+  }{
+    customerEx.Id,
+    customerEx.Name,
+    customerEx.Sex,
+  }
+  return c.Render(http.StatusOK, "customers.html", data)
 }
 
-func show(c echo.Context) error{
-  team := c.QueryParam("team")
-  member := c.QueryParam("member")
-  return c.String(http.StatusOK, "team: " + team + ", member: " + member)
+
+func showUser(c echo.Context) error{
+  db := connectDB()
+
+  customerEx := Customer{}
+  paramId, _ := strconv.Atoi(c.Param("id"))
+  customerEx.Id = paramId
+  db.First(&customerEx)
+  return c.String(http.StatusOK, customerEx.Name)
+}
+
+func searchUser(c echo.Context) error{
+  var keyword string
+  keyword = c.Param("keyword")
+  var Info string
+  Info = searchDB(keyword)
+
+  return c.Render(http.StatusOK, "search.html", Info)
 }
 
 func save(c echo.Context) error{
@@ -78,4 +138,33 @@ func saveUsers(c echo.Context) error{
     return err
   }
   return c.JSON(http.StatusCreated, u)
+}
+
+func connectDB() *gorm.DB{
+  DBMS := "mysql"
+  USER := "root"
+  PASS := "verysecret"
+  PROTOCOL := "tcp(127.0.0.1:13306)"
+  DBNAME := "customer"
+
+  CONNECT := USER+":"+PASS+"@"+PROTOCOL+"/"+DBNAME
+  db, err := gorm.Open(DBMS, CONNECT)
+
+  if err != nil{
+    panic(err.Error())
+  }
+  return db
+}
+
+func searchDB(keyword string) string{
+  db := connectDB()
+
+  var customer Customer
+  db.First(&customer, "Name = ?", keyword)
+
+  var Info string
+  Info += "ID: " + fmt.Sprint(customer.Id)
+  Info += "Name: " + fmt.Sprint(customer.Name)
+
+  return Info
 }

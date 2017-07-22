@@ -18,5 +18,5 @@ ____________________________________O/_______
 curl -F "name=Joe Smith" -F "email=joe@labstack.com" http://localhost:1323/save
 name: Joe Smith, email: joe@labstack.com
 ```
-#
+#　template rendering
 - [template rendering](https://echo.labstack.com/guide/templates)
