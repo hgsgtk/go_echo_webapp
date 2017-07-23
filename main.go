@@ -2,20 +2,19 @@ package main
 
 import(
   "net/http"
-  "github.com/labstack/echo"
   "os"
   "io"
-  "github.com/jinzhu/gorm"
-  _ "github.com/jinzhu/gorm/dialects/mysql"
   "strconv"
   "html/template"
   "log"
   "fmt"
-)
 
-type TemplateRenderer struct{
-  templates *template.Template
-}
+  "github.com/labstack/echo"
+  "github.com/labstack/echo/middleware"
+
+  "github.com/jinzhu/gorm"
+  _ "github.com/jinzhu/gorm/dialects/mysql"
+)
 
 type User struct{
   Name string `json:"name" xml:"name" form:"name" query:"name"`
@@ -29,23 +28,34 @@ type Customer struct{
   Tel string  `json:tel`
 }
 
+var templates map[string]*template.Template
 
-func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error{
-  if viewContext, isMap := data.(map[string]interface{}); isMap{
-    viewContext["reverse"] = c.Echo().Reverse
-  }
-  return t.templates.ExecuteTemplate(w, name, data)
+type Template struct{
 }
 
+func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error{
+  return templates[name].ExecuteTemplate(w, "layout.html", data)
+}
 
 func main(){
+  // Create Echo Instance
   e := echo.New()
-  renderer := &TemplateRenderer{
-    templates: template.Must(template.ParseGlob("html/*.html")),
-  }
-  e.Renderer = renderer
 
-  // Routing
+  // Renderer Setting to use templates
+  t := &Template{}
+  e.Renderer = t
+
+  // Middleware Setting
+  e.Use(middleware.Logger())
+  e.Use(middleware.Recover())
+
+  // File Path Setting
+  e.Static("/public/css/", "./public/css/")
+  e.Static("/public/js/", "./public/js/")
+  e.Static("/public/img/", "./public/img/")
+
+
+  // Routing Handleer
   e.GET("/", home)
   e.GET("/users", users)
   e.GET("/users/:id", showUser)
@@ -53,11 +63,25 @@ func main(){
   e.POST("/save", save)
   e.POST("/users/save", saveUser)
   e.POST("/users", saveUsers)
+
+  // Start Server
   e.Logger.Fatal(e.Start(":1323"))
 }
 
+func init(){
+  loadTemplates()
+}
+
+func loadTemplates(){
+  var baseTemplate = "templates/layout.html"
+  templates = make(map[string]*template.Template)
+  templates["index"] = template.Must(
+    template.ParseFiles(baseTemplate, "templates/hello.html"))
+}
+
+
 func home(c echo.Context) error{
-  return c.String(http.StatusOK, "Hello, World!")
+  return c.Render(http.StatusOK, "index", "Hello, World!")
 
 }
 
