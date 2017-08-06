@@ -7,23 +7,32 @@ import(
   "os/signal"
   "syscall"
   "time"
-  "log"
 
+  "./model"
   "./session"
   "./setting"
   "github.com/labstack/echo"
   "github.com/labstack/echo/middleware"
+  "github.com/labstack/gommon/log"
 )
 
+// レイアウト適用済みのテンプレートを保存するmap
 var templates map[string]*template.Template
 
+// セッション管理のinstance
 var sessionManager *session.Manager
+
+// データアクセサのインスタンス
+var userDA *model.UserDataAccessor
 
 func main(){
   // Create Echo Instance
   e := echo.New()
 
-  // Renderer Setting to use templates
+  // ログの出力レベルを設定
+  e.Logger.SetLevel(log.DEBUG)
+
+  // テンプレートを利用するためのRendererの設定
   t := &Template{}
   e.Renderer = t
 
@@ -40,6 +49,10 @@ func main(){
   // セッション管理を開始
   sessionManager = &session.Manager{}
   sessionManager.Start(e)
+
+  // データアクセサの開始
+  userDA = &model.UserDataAccessor{}
+  userDA.Start(e)
 
   // サーバ開始
   go func(){
@@ -58,6 +71,9 @@ func main(){
     e.Logger.Info(err)
     e.Close()
   }
+
+  // データアクセサの停止
+  userDA.Stop()
 
   // セッション管理を停止
   sessionManager.Stop()

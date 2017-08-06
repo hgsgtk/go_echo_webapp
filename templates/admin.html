@@ -1,0 +1,11 @@
+{{define "content"}}
+<h2>Adminstrator Page</h2>
+<hr />
+<form action="/admin/users" method="GET">
+  <input type="submit" value="ユーザー一覧" style="width: 100px;" />
+</form>
+<hr />
+<form action="/logout" method="POST">
+  <input type="submit" value="ログアウト" style="width: 100px:" />
+</form>
+{{end}}

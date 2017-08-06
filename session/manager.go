@@ -12,13 +12,13 @@ type ID string
 
 // セッションデータと整合性トークンを保持する構造体
 type Store struct{
-  Data  map[string]string
+  Data              map[string]string
   ConsistencyToken  string
 }
 
 // Sessionの操作・管理するManager
 type Manager struct{
-  stopCh  chan  struct{}
+  stopCh    chan  struct{}
   commandCh chan  command
   stopGCCh  chan  struct{}
 }

@@ -9,22 +9,22 @@ import(
 )
 
 // ブラウザのcookieにsession.IDを書き込む
-func writeSessionID(c echo.Context, sessionID session.ID) error{
+func WriteCookie(c echo.Context, sessionID ID) error{
   cookie := new(http.Cookie)
-  cookie.Name = sessionCookieName
+  cookie.Name = setting.Session.CookieName
   cookie.Value = string(sessionID)
-  cookie.Expires = time.Now().Add(sessionCookieExpire)
+  cookie.Expires = time.Now().Add(setting.Session.CookieExpire)
   c.SetCookie(cookie)
   return nil
 }
 
 // ブラウザのcookieからsession.IDを読み込む
-func readSessionID(c echo.Context)(session.ID, error){
-  var sessionID session.ID
-  cookie, err := c.Cookie(sessionCookieName)
+func ReadCookie(c echo.Context)(ID, error){
+  var sessionID ID
+  cookie, err := c.Cookie(setting.Session.CookieName)
   if err != nil{
     return sessionID, err
   }
-  sessionID = session.ID(cookie.Value)
+  sessionID = ID(cookie.Value)
   return sessionID, nil
 }
