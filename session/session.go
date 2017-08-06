@@ -116,16 +116,17 @@ func(m *Manager)DeleteExpired() error{
   if resp.err != nil{
     e.Logger.Debugf("Session DeleteExpired Error. [%s]", resp.err)
   }
+  return nil
 }
 
 // Managerが返す各エラーのinstance
 var(
-  ErrorBadParameter = errors.New("Bad Parameter")
-  ErrorNotFound = errors.New("Not Found")
-  ErrorInvalidToken = errors.New("Invalid Token")
-  ErrorInvalidCommand = errors.New("Invalid Command")
-  ErrorNotImplemented = errors.New("Not Implemented")
-  ErrorOther = errors.New("Other")
+  ErrorBadParameter     = errors.New("Bad Parameter")
+  ErrorNotFound         = errors.New("Not Found")
+  ErrorInvalidToken     = errors.New("Invalid Token")
+  ErrorInvalidCommand   = errors.New("Invalid Command")
+  ErrorNotImplemented   = errors.New("Not Implemented")
+  ErrorOther            = errors.New("Other")
 )
 
 // Echo Instance
@@ -153,7 +154,7 @@ const(
 
 // コマンド実行のためのパラメータ
 type command struct{
-  cmdType     commandTyoe
+  cmdType     commandType
   req         []interface{}
   responseCh  chan response
 }
@@ -229,7 +230,7 @@ loop:
         }
         reqSessionStore, ok := cmd.req[1].(Store)
         if !ok{
-          cmd.responseCh <- response{nil, ErrorBadparameter}
+          cmd.responseCh <- response{nil, ErrorBadParameter}
           break
         }
         session, ok := sessions[reqSessionID]
@@ -241,7 +242,7 @@ loop:
           cmd.responseCh <- response{nil, ErrorNotFound}
           break
         }
-        if session.store.ConsistencyToken != reqSesionStore.ConsistencyToken{
+        if session.store.ConsistencyToken != reqSessionStore.ConsistencyToken{
           cmd.responseCh <- response{nil, ErrorInvalidToken}
           break
         }
@@ -251,7 +252,7 @@ loop:
           sessionData[k] = v
         }
         sessionStore.Data = sessionData
-        sessionStore.ConsistenctToken = createToken()
+        sessionStore.ConsistencyToken = createToken()
         session.store = sessionStore
         session.expire = time.Now().Add(sessionExpire)
         sessions[reqSessionID] = session
@@ -306,7 +307,7 @@ loop:
     select{
     case <-t.C:
       respCh := make(chan response, 1)
-      defer close{respCh}
+      defer close(respCh)
       cmd := command{commandDeleteExpired, nil, respCh}
       m.commandCh <- cmd
       <-respCh
@@ -320,10 +321,10 @@ loop:
 
 // 新規SessionIDの発行
 func createSessionID() string{
-  return uuid.NewV4.String()
+  return uuid.NewV4().String()
 }
 
 // 新規整合性トークンの発行
 func createToken() string{
-  return uuid.Newv4().String()
+  return uuid.NewV4().String()
 }

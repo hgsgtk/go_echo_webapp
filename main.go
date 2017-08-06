@@ -1,17 +1,21 @@
 package main
 
 import(
+  "context"
   "net/http"
   "os"
+  "os/signal"
+  "syscall"
+  "time"
   "io"
   "strconv"
   "html/template"
   "log"
   "fmt"
 
+  "./session"
   "github.com/labstack/echo"
   "github.com/labstack/echo/middleware"
-
   "github.com/jinzhu/gorm"
   _ "github.com/jinzhu/gorm/dialects/mysql"
 )
@@ -30,9 +34,16 @@ type Customer struct{
 
 var templates map[string]*template.Template
 
+var sessionManager *session.Manager
+
 type Template struct{
 }
 
+// セッションのCookieに関する設定
+const(
+  sessionCookieName string = "apisrv_session_id"
+  sessionCookieExpire time.Duration = (1 * time.Hour)
+)
 func (t *Template) Render(w io.Writer, name string, data interface{}, c echo.Context) error{
   return templates[name].ExecuteTemplate(w, "layout.html", data)
 }
@@ -63,20 +74,52 @@ func main(){
   e.POST("/save", save)
   e.POST("/users/save", saveUser)
   e.POST("/users", saveUsers)
+  e.GET("/session_form", showSessionForm)
+  e.GET("/session", showSession)
+  e.POST("/session", postSession)
+  e.POST("/session_delete", deleteSession)
 
-  // Start Server
+  // セッション管理を開始
+  sessionManager = &session.Manager{}
+  sessionManager.Start(e)
+
+  // サーバを開始
   e.Logger.Fatal(e.Start(":1323"))
+
+  // 中断を検知したらリクエストの完了を10秒まで待ってサーバを終了する
+  quit := make(chan os.Signal)
+  signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+  <-quit
+  ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+  defer cancel()
+  if err := e.Shutdown(ctx); err != nil{
+    e.Logger.Info(err)
+    e.Close()
+  }
+
+  // セッション管理を停止
+  sessionManager.Stop()
+
+  // 終了ログが出るまで少し待つ
+  time.Sleep(1 * time.Second)
 }
 
 func init(){
   loadTemplates()
 }
 
+// 各HTMLテンプレートに共通レイアウトを適用した結果を保存する
 func loadTemplates(){
   var baseTemplate = "templates/layout.html"
   templates = make(map[string]*template.Template)
-  templates["index"] = template.Must(
+  templates["index"]        = template.Must(
     template.ParseFiles(baseTemplate, "templates/hello.html"))
+  templates["session_form"] = template.Must(
+    template.ParseFiles(baseTemplate, "templates/session_form.html"))
+  templates["session"]      = template.Must(
+    template.ParseFiles(baseTemplate, "templates/session.html"))
+  templates["error"]        = template.Must(
+    template.ParseFiles(baseTemplate, "templates/error.html"))
 }
 
 
@@ -162,6 +205,82 @@ func saveUsers(c echo.Context) error{
     return err
   }
   return c.JSON(http.StatusCreated, u)
+}
+
+func showSessionForm(c echo.Context) error{
+  return c.Render(http.StatusOK, "session_form", nil)
+}
+
+func showSession(c echo.Context) error{
+  sessionID, err := readSessionID(c)
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session cookie Read Error: "+err.Error())
+  }
+  sessionStore, err := sessionManager.LoadStore(sessionID)
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session store Load Error: "+err.Error())
+  }
+  return c.Render(http.StatusOK, "session",
+    map[string]interface{}{"msg": "", "data": sessionStore.Data})
+}
+
+func postSession(c echo.Context) error{
+  key1 := c.FormValue("key1")
+  key2 := c.FormValue("key2")
+  sessionID, err := sessionManager.Create()
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session Create Error: "+err.Error())
+  }
+  writeSessionID(c, sessionID)
+  sessionStore, err := sessionManager.LoadStore(sessionID)
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session store Load Error: "+err.Error())
+  }
+  sessionData := map[string]string{
+    "key1": key1,
+    "key2": key2,
+  }
+  sessionStore.Data = sessionData
+  err = sessionManager.SaveStore(sessionID, sessionStore)
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session store Save Error: "+err.Error())
+  }
+  return c.Render(http.StatusOK, "session_form",
+    map[string]interface{}{"msg": "セッションデータを保存しました", "data": sessionStore.Data})
+}
+
+func deleteSession(c echo.Context) error{
+  sessionID, err := readSessionID(c)
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session cookie Read Error: "+err.Error())
+  }
+  err = sessionManager.Delete(sessionID)
+  if err != nil{
+    return c.Render(http.StatusOK, "error", "Session delete Error: "+err.Error())
+  }
+  return c.Render(http.StatusOK, "session",
+    map[string]interface{}{"msg": "セッション" + sessionID + "を削除しました。"})
+}
+
+// ブラウザのcookieにsession.IDを書き込む
+func writeSessionID(c echo.Context, sessionID session.ID) error{
+  cookie := new(http.Cookie)
+  cookie.Name = sessionCookieName
+  cookie.Value = string(sessionID)
+  cookie.Expires = time.Now().Add(sessionCookieExpire)
+  c.SetCookie(cookie)
+  return nil
+}
+
+// ブラウザのcookieからsession.IDを読み込む
+func readSessionID(c echo.Context)(session.ID, error){
+  var sessionID session.ID
+  cookie, err := c.Cookie(sessionCookieName)
+  if err != nil{
+    return sessionID, err
+  }
+  sessionID = session.ID(cookie.Value)
+  return sessionID, nil
 }
 
 func connectDB() *gorm.DB{

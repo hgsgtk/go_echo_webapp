@@ -1,0 +1,15 @@
+{{ define "content" }}
+<h2>Create Session Data</h2>
+<form action="/session" method="POST">
+  <p>
+    <label for="key1">Key 1: </label>
+    <input type="text" id="key1" name="key1" value="{{.data.key1}}" />
+  </p>
+  <p>
+    <label for="key2">Key 2: </label>
+    <input type="text" id="key2" name="key2" value="{{.data.key2}}" />
+  </p>
+  <p>{{.msg}}</p>
+  <input type="submit" />
+</form>
+{{ end }}
